@@ -7,163 +7,168 @@
 import Foundation
 import UIKit
 
-
-public enum StatusProviderType {
-    
-    struct Constants {
-        static let loadingTag   = 7023
-        static let errorTag     = 7024
-        static let emtyTag      = 7025
-        static let noneTag      = 7026
-    }
-    
-    case Loading
-    case Error(error: NSError?, retry: (()->Void)?)
-    case Empty(action: (()->Void)?)
-    case None
-    
-    static func allViewTags() -> [Int]{
-        return [ Constants.loadingTag,Constants.errorTag,Constants.emtyTag,Constants.noneTag]
-    }
-    
-    func viewTag() -> Int{
-        switch self {
-        case .Loading:    return  Constants.loadingTag
-        case .Error(_,_): return  Constants.errorTag
-        case .Empty(_):    return  Constants.emtyTag
-        case .None:       return  Constants.noneTag
-        }
-    }
+public protocol StatusModel {
+    var isLoading: Bool         { get }
+    var title: String?          { get }
+    var description: String?    { get }
+    var actionTitle: String?    { get }
+    var image: UIImage?         { get }
+    var action: (() -> Void)?   { get }
 }
 
-func == (lhs: StatusProviderType, rhs: StatusProviderType) -> Bool {
-    switch (lhs, rhs) {
-        case (.Loading, .Loading): return true
-        case (.Empty(_), .Empty(_)): return true
-        case (.None, .None): return true
-        case let (.Error(error1, _), .Error(error2, _)) where error1 == error2:  return true
-        default: return false
+extension StatusModel {
+    
+    public var isLoading: Bool {
+        return false
     }
-}
-
-public protocol StatusOnViewProvider {
-    var onView: UIView { get }
-}
-
-public protocol StatusProvider: StatusOnViewProvider {
     
-    var loadingView: UIView?                    { get }
-    var errorView: ErrorStatusDisplaying?       { get }
-    var emptyView: EmptyStatusDisplaying?        { get }
-
-    func show(statusType type: StatusProviderType)
-    func hide(statusType type: StatusProviderType)
-}
-
-extension StatusOnViewProvider where Self: UIViewController {
-    
-    public var onView: UIView {
-        return view
+    public var title: String? {
+        return nil
     }
+    
+    public var description: String? {
+        return nil
+    }
+    
+    public var actionTitle: String? {
+        return nil
+    }
+    
+    public var image: UIImage? {
+        return nil
+    }
+    
+    public var action: (() -> Void)? {
+        return nil
+    }
+    
 }
 
-extension StatusOnViewProvider where Self: UITableViewController {
+public struct Status: StatusModel {
+    public let isLoading: Bool
+    public let title: String?
+    public let description: String?
+    public let actionTitle: String?
+    public let image: UIImage?
+    public let action: (() -> Void)?
     
-    public var onView: UIView {
-        return view
+    public init(isLoading: Bool = false, title: String? = nil, description: String? = nil, actionTitle: String? = nil, image: UIImage? = nil, action: (() -> Void)? = nil) {
+        self.isLoading = isLoading
+        self.title = title
+        self.description = description
+        self.actionTitle = actionTitle
+        self.image = image
+        self.action = action
+    }
+    
+    public static var simpleLoading: Status {
+        return Status(isLoading: true)
     }
 }
 
-extension StatusOnViewProvider where Self: UIView {
+public protocol StatusView: class {
+    var status: StatusModel?  { set get }
+    var view: UIView { get }
+}
+
+public protocol StatusController {
+    var onView: StatusViewContainer { get }
+    var statusView: StatusView?     { get }
     
-    public var onView: UIView {
+    func show(status: StatusModel)
+    func hideStatus()
+}
+
+extension StatusController {
+    
+    public var statusView: StatusView? {
+        return DefaultStatusView()
+    }
+    
+    public func hideStatus() {
+        onView.statusContainerView = nil
+    }
+    
+    fileprivate func _show(status: StatusModel) {
+        guard let sv = statusView else { return }
+        sv.status = status
+        onView.statusContainerView = sv.view
+    }
+}
+
+extension StatusController where Self: UIView {
+    
+    public var onView: StatusViewContainer {
         return self
     }
+    
+    public func show(status: StatusModel) {
+        _show(status: status)
+    }
 }
 
-public protocol EmptyStatusDisplaying: class {
+extension StatusController where Self: UIViewController {
     
-    var action: (()->Void)?         { set get }
+    public var onView: StatusViewContainer {
+        return view
+    }
+    
+    public func show(status: StatusModel) {
+        _show(status: status)
+        
+        #if os(tvOS)
+        setNeedsFocusUpdate()
+        updateFocusIfNeeded()
+        #endif
+    }
 }
 
-public protocol ErrorStatusDisplaying: class {
+extension StatusController where Self: UITableViewController {
     
-    var error: NSError?             { set get }
-    var retry: (()->Void)?          { set get }
+    public var onView: StatusViewContainer {
+        if let backgroundView = tableView.backgroundView {
+            return backgroundView
+        }
+        return view
+    }
+    
+    public func show(status: StatusModel) {
+        _show(status: status)
+        
+        #if os(tvOS)
+        setNeedsFocusUpdate()
+        updateFocusIfNeeded()
+        #endif
+    }
 }
 
-extension StatusProvider{
+public protocol StatusViewContainer: class {
+    var statusContainerView: UIView? { get set }
+}
+
+extension UIView: StatusViewContainer {
+    public static let StatusViewTag = 666
     
-    
-    public var loadingView: UIView? {
+    open var statusContainerView: UIView? {
         get {
-            #if os(tvOS)
-                return LoadingStatusView(loadingStyle: .Activity)
-            #elseif os(iOS)
-                return LoadingStatusView(loadingStyle: .LabelWithActivity)
-            #else
-                return nil
-            #endif
+            return viewWithTag(UIView.StatusViewTag)
         }
-    }
-    
-    public var errorView: ErrorStatusDisplaying? {
-        get { return ErrorStatusView() }
-    }
-    
-    public var emptyView: EmptyStatusDisplaying? {
-        get { return nil }
-    }
-    
-    public func hide(statusType type: StatusProviderType){
-        remove(viewTag: type.viewTag())
-    }
-    
-    func remove(viewTag tag: Int){
-        onView.viewWithTag(tag)?.removeFromSuperview()
-    }
-    
-    public func show(statusType type: StatusProviderType){
-        
-        StatusProviderType.allViewTags().forEach({ remove(viewTag: $0) })
-        
-        var statusView: UIView? = nil
-        
-        switch type {
-        case let .Error(error,retry):
+        set {
+            viewWithTag(UIView.StatusViewTag)?.removeFromSuperview()
             
-            statusView = errorView as? UIView
-            (statusView as? ErrorStatusDisplaying)?.error = error
-            (statusView as? ErrorStatusDisplaying)?.retry = retry
+            guard let view = newValue else { return }
             
-        case .Loading: statusView = loadingView
-        case let .Empty(action):
-            
-            statusView = emptyView as? UIView
-            (statusView as? EmptyStatusDisplaying)?.action = action
-            
-        case .None: break
+            view.tag = UIView.StatusViewTag
+            addSubview(view)
+            view.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                view.centerXAnchor.constraint(equalTo: centerXAnchor),
+                view.centerYAnchor.constraint(equalTo: centerYAnchor),
+                view.leadingAnchor.constraint(greaterThanOrEqualTo: readableContentGuide.leadingAnchor),
+                view.trailingAnchor.constraint(lessThanOrEqualTo: readableContentGuide.trailingAnchor),
+                view.topAnchor.constraint(greaterThanOrEqualTo: topAnchor),
+                view.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor)
+                ])
         }
-        
-        statusView?.tag = type.viewTag()
-        addViewAndCenterConstraints(statusView)
-    }
-    
-    private func addViewAndCenterConstraints(view: UIView?){
-        
-        guard let view = view else { return }
-        
-        onView.addSubview(view)
-        
-        view.translatesAutoresizingMaskIntoConstraints = false
-        
-        NSLayoutConstraint.activateConstraints([
-            view.centerXAnchor.constraintEqualToAnchor(onView.centerXAnchor),
-            view.centerYAnchor.constraintEqualToAnchor(onView.centerYAnchor),
-            view.leadingAnchor.constraintGreaterThanOrEqualToAnchor(onView.leadingAnchor),
-            view.trailingAnchor.constraintLessThanOrEqualToAnchor(onView.trailingAnchor),
-            view.topAnchor.constraintGreaterThanOrEqualToAnchor(onView.topAnchor),
-            view.bottomAnchor.constraintLessThanOrEqualToAnchor(onView.bottomAnchor)
-        ])
     }
 }

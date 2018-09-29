@@ -1,5 +1,5 @@
 //
-//  EmtyViewController.swift
+//  EmptyViewController.swift
 //  StatusProvider
 //
 //  Created by MarioHahn on 26/08/16.
@@ -10,24 +10,28 @@ import Foundation
 import UIKit
 import StatusProvider
 
-extension EmptyViewController: StatusProvider {
-    
-    var emptyView: EmptyStatusDisplaying?{
-        return EmptyStatusView(title: "No Data", caption: "No data available.💣", image:  UIImage(named: "placeholder_instagram"), actionTitle: "Create ⭐️")
-    }
-    
-}
+class EmptyViewController: UIViewController, StatusController {
 
-class EmptyViewController: UIViewController {
-    
     override func viewDidLoad() {
         super.viewDidLoad()
         
         title = "Empty"
         
-        show(statusType: StatusProviderType.Empty(action: {
-            self.show(statusType: .Loading)
-        }))
+        let status = Status(title: "no Data", description: "No data available.💣", actionTitle: "Create ⭐️", image: UIImage(named: "placeholder_instagram")) {
+            self.hideStatus()
+        }    
+        
+        show(status: status)        
     }
+}
+
+class EmptyStatusTestView: UIView {
     
+}
+
+extension EmptyStatusTestView: StatusController {
+    
+    var statusView: StatusView? {
+        return DefaultStatusView()
+    }
 }

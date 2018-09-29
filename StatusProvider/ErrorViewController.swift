@@ -10,10 +10,6 @@ import Foundation
 import UIKit
 import StatusProvider
 
-extension ErrorViewController: StatusProvider {
-    
-}
-
 class ErrorViewController: UIViewController {
     
     override func viewDidLoad() {
@@ -21,10 +17,19 @@ class ErrorViewController: UIViewController {
         
         title = "Error"
         
-        let error = NSError(domain: "my.domain", code: 405, userInfo: [NSLocalizedDescriptionKey : "Oh... fu**"])
+        let simpleLoading = Status.simpleLoading
         
-        show(statusType: .Error(error: error, retry: {
-            self.show(statusType: .Loading)
-        }))
+        let status = Status(title: "Error", description: "Oh... fu**", actionTitle: "Retry 🚀") {
+            self.show(status: simpleLoading)
+        }
+        
+        show(status: status)        
+    }
+}
+
+extension ErrorViewController: StatusController {
+   
+    var statusView: StatusView? {
+        return DefaultStatusView()
     }
 }
